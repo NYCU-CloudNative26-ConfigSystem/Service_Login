@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    max_password_length: int = 72
     
     # Session
     session_expire_seconds: int = 86400  # 24 hours

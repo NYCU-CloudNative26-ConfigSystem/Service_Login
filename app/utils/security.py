@@ -1,17 +1,11 @@
 """Security utilities for password and token management"""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import bcrypt
 import jwt
-from passlib.context import CryptContext
 from app.core.config import settings
+from app.core.exceptions import PasswordTooLongException
 from app.core.logging import logger
-
-# Password hashing context
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__rounds=12,
-)
 
 
 class SecurityUtils:
@@ -20,12 +14,25 @@ class SecurityUtils:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash password using bcrypt"""
-        return pwd_context.hash(password)
+        if len(password.encode("utf-8")) > settings.max_password_length:
+            raise PasswordTooLongException()
+
+        hashed_password = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt(rounds=12),
+        )
+        return hashed_password.decode("utf-8")
     
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """Verify plain password against hashed password"""
-        return pwd_context.verify(plain_password, hashed_password)
+        try:
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8"),
+                hashed_password.encode("utf-8"),
+            )
+        except ValueError:
+            return False
     
     @staticmethod
     def create_access_token(user_id: int, expires_delta: Optional[timedelta] = None) -> str:
@@ -37,7 +44,7 @@ class SecurityUtils:
         expire = now + expires_delta
         
         payload = {
-            "sub": user_id,
+            "sub": str(user_id),
             "iat": int(now.timestamp()),
             "exp": int(expire.timestamp()),
             "type": "access",
@@ -63,7 +70,7 @@ class SecurityUtils:
         expire = now + expires_delta
         
         payload = {
-            "sub": user_id,
+            "sub": str(user_id),
             "iat": int(now.timestamp()),
             "exp": int(expire.timestamp()),
             "type": "refresh",
@@ -95,6 +102,10 @@ class SecurityUtils:
             if payload.get("type") != token_type:
                 logger.warning(f"Invalid token type: {payload.get('type')}")
                 return None
+
+            subject = payload.get("sub")
+            if isinstance(subject, str) and subject.isdigit():
+                payload["sub"] = int(subject)
             
             return payload
         except jwt.ExpiredSignatureError:

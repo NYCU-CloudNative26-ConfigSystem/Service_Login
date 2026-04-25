@@ -2,6 +2,8 @@
 import pytest
 from app.schemas.user import UserRegisterRequest, UserLoginRequest
 from app.utils.security import SecurityUtils
+from app.core.exceptions import PasswordTooLongException
+from app.core.config import settings
 
 
 class TestAuthEndpoints:
@@ -131,6 +133,42 @@ class TestAuthEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["email"] == "test@example.com"
+
+    def test_five_times_failed_login_attempts(self, client):
+        """Test account lockout after 5 failed login attempts"""
+
+        # Define login payloads
+        correct_login_json = {
+            "email": "test@example.com",
+            "password": "securepassword123",
+        }
+        wrong_login_json = {
+            "email": "test@example.com",
+            "password": "OR 1=1 --",
+        }
+
+        # Register user
+        response = client.post(
+            "/api/v1/auth/register",
+            json=correct_login_json | {"username": "testuser"},
+        )
+        # Registration should succeed
+        assert response.status_code == 201
+
+        # Attempt to login with wrong password 5 times
+        for _ in range(settings.max_login_attempts):
+            response = client.post(
+                "/api/v1/auth/login",
+                json= wrong_login_json
+            )
+            assert response.status_code == 401
+        # 6th attempt should result in account lockout
+        response = client.post(
+            "/api/v1/auth/login",
+            json= correct_login_json
+        )
+        # Account should be locked after 5 failed attempts
+        assert response.status_code == 429
     
     def test_get_current_user_without_token(self, client):
         """Test getting current user without authentication"""
@@ -182,6 +220,16 @@ class TestSecurityUtils:
         assert hashed != password
         assert SecurityUtils.verify_password(password, hashed)
         assert not SecurityUtils.verify_password("wrongpassword", hashed)
+
+    def test_password_hashing_rejects_long_utf8_password(self):
+        """Test hashing rejects passwords that exceed bcrypt's 72-byte limit"""
+        password = "密" * 25
+
+        assert len(password) <= 72
+        assert len(password.encode("utf-8")) > 72
+
+        with pytest.raises(PasswordTooLongException):
+            SecurityUtils.hash_password(password)
     
     def test_token_creation_and_decoding(self):
         """Test token creation and decoding"""
@@ -193,3 +241,5 @@ class TestSecurityUtils:
         payload = SecurityUtils.decode_token(token)
         assert payload is not None
         assert payload["sub"] == user_id
+
+    

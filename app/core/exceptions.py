@@ -20,6 +20,15 @@ class InvalidCredentialsException(HTTPException):
         )
 
 
+class PasswordTooLongException(HTTPException):
+    """Raised when a password exceeds bcrypt's 72-byte limit"""
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password cannot exceed 72 bytes when encoded as UTF-8",
+        )
+
+
 class UserNotFoundException(HTTPException):
     """Raised when user is not found"""
     def __init__(self):
