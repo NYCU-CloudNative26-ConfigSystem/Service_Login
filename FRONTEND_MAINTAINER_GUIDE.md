@@ -1,62 +1,56 @@
-# 前端與維護人員協作文件
+# Frontend API Integration Guide
 
-本文件提供給前端工程師、後端維護者與 DevOps 維運人員，作為此服務的單一交接入口。
+This document is for frontend engineers integrating with this authentication service.
 
-## 1. 服務定位
+## 1. Service Scope
 
-- 服務名稱：Login Service
-- 主要責任：註冊、登入、JWT 驗證、Token 刷新、登出黑名單
-- 後端框架：FastAPI
-- 資料儲存：
-  - PostgreSQL：使用者靜態資料
-  - Redis：登入失敗計數、Token 黑名單、暫存資料
+This service provides:
 
-## 2. 啟動方式與連線資訊
+- User registration
+- User login
+- Token-based authentication with JWT
+- Access token refresh
+- Logout with token blacklist
+- Current-user lookup
 
-### 2.1 使用 Docker Compose（建議）
-
-```bash
-docker compose up -d
-```
-
-預設對外 API 位址：
+Base URL in local development:
 
 - `http://localhost:18000`
 
-預設文件與健康檢查：
-
-- Swagger：`http://localhost:18000/docs`
-- Health：`http://localhost:18000/health`
-
-### 2.2 只啟動基礎設施（本機跑 API）
-
-```bash
-docker compose up -d postgres redis
-uvicorn main:app --reload --host 0.0.0.0 --port 18000
-```
-
-## 3. 前端整合規範
-
-### 3.1 API Base URL
-
-本機開發建議：
+API prefix:
 
 - `http://localhost:18000/api/v1`
 
-認證路由前綴：
+Swagger docs:
 
-- `/auth`
+- `http://localhost:18000/docs`
 
-完整範例：
+OpenAPI JSON:
 
-- 註冊：`POST http://localhost:18000/api/v1/auth/register`
+- `http://localhost:18000/openapi.json`
 
-### 3.2 Auth API 一覽
+## 2. Startup Checklist For Frontend
 
-#### 註冊
+1. Confirm backend is running.
+2. Open `http://localhost:18000/health` and verify status is healthy.
+3. Open `http://localhost:18000/docs` and verify auth endpoints are listed.
+4. Set frontend env var (example):
 
-- Method/Path：`POST /api/v1/auth/register`
-- Request JSON：
+```bash
+VITE_API_BASE_URL=http://localhost:18000/api/v1
+```
+
+## 3. Authentication API Contract
+
+All auth endpoints are under `/api/v1/auth`.
+
+### 3.1 Register
+
+- Method: `POST`
+- Path: `/api/v1/auth/register`
+- Auth required: No
+
+Request body:
 
 ```json
 {
@@ -67,16 +61,46 @@ uvicorn main:app --reload --host 0.0.0.0 --port 18000
 }
 ```
 
-- 成功回應：`201 Created`
-- 重要欄位限制：
-  - `email`：合法 email
-  - `username`：3-100 字元
-  - `password`：至少 8 字元
+Validation notes:
 
-#### 登入
+- `email`: valid email format
+- `username`: 3 to 100 chars
+- `password`: at least 8 chars
+- `full_name`: optional, max 255 chars
+- Password hashing follows bcrypt byte-length limit; very long UTF-8 passwords may be rejected with 400.
 
-- Method/Path：`POST /api/v1/auth/login`
-- Request JSON：
+Success response:
+
+- Status: `201 Created`
+
+Example response:
+
+```json
+{
+  "id": 1,
+  "email": "john@example.com",
+  "username": "john_doe",
+  "full_name": "John Doe",
+  "is_active": true,
+  "is_verified": false,
+  "created_at": "2026-04-26T12:00:00",
+  "updated_at": "2026-04-26T12:00:00",
+  "last_login_at": null
+}
+```
+
+Common failures:
+
+- `400`: duplicate email or username
+- `422`: invalid schema or missing required fields
+
+### 3.2 Login
+
+- Method: `POST`
+- Path: `/api/v1/auth/login`
+- Auth required: No
+
+Request body:
 
 ```json
 {
@@ -85,13 +109,16 @@ uvicorn main:app --reload --host 0.0.0.0 --port 18000
 }
 ```
 
-- 成功回應：`200 OK`
-- Response JSON：
+Success response:
+
+- Status: `200 OK`
+
+Example response:
 
 ```json
 {
-  "access_token": "...",
-  "refresh_token": "...",
+  "access_token": "<jwt_access_token>",
+  "refresh_token": "<jwt_refresh_token>",
   "token_type": "bearer",
   "user": {
     "id": 1,
@@ -100,56 +127,82 @@ uvicorn main:app --reload --host 0.0.0.0 --port 18000
     "full_name": "John Doe",
     "is_active": true,
     "is_verified": false,
-    "created_at": "2026-03-29T00:00:00",
-    "updated_at": "2026-03-29T00:00:00",
-    "last_login_at": "2026-03-29T00:00:00"
+    "created_at": "2026-04-26T12:00:00",
+    "updated_at": "2026-04-26T12:00:00",
+    "last_login_at": "2026-04-26T12:05:00"
   }
 }
 ```
 
-#### 取得當前使用者
+Common failures:
 
-- Method/Path：`GET /api/v1/auth/me`
-- Header：`Authorization: Bearer <access_token>`
-- 成功回應：`200 OK`
-- 未帶 Token：`403 Forbidden`（來自 HTTPBearer）
-- Token 無效或過期：`401 Unauthorized`
+- `401`: invalid email/password, invalid token in downstream flow
+- `429`: account temporarily locked after max failed attempts
+- `422`: invalid request payload
 
-#### 刷新 Access Token
+### 3.3 Get Current User
 
-- Method/Path：`POST /api/v1/auth/refresh`
-- Request JSON：
+- Method: `GET`
+- Path: `/api/v1/auth/me`
+- Auth required: Yes (`Authorization: Bearer <access_token>`)
+
+Success response:
+
+- Status: `200 OK`
+- Body: same shape as user object in login response
+
+Common failures:
+
+- `403`: missing bearer token header (FastAPI `HTTPBearer` behavior)
+- `401`: invalid/expired token or blacklisted token
+
+### 3.4 Refresh Access Token
+
+- Method: `POST`
+- Path: `/api/v1/auth/refresh`
+- Auth required: No (refresh token is in body)
+
+Request body:
 
 ```json
 {
-  "refresh_token": "..."
+  "refresh_token": "<jwt_refresh_token>"
 }
 ```
 
-- 成功回應：`200 OK`
-- Response JSON：
+Success response:
+
+- Status: `200 OK`
 
 ```json
 {
-  "access_token": "...",
+  "access_token": "<new_access_token>",
   "token_type": "bearer"
 }
 ```
 
-#### 登出
+Common failures:
 
-- Method/Path：`POST /api/v1/auth/logout`
-- Header：`Authorization: Bearer <access_token>`
-- Request JSON：
+- `401`: refresh token expired, invalid, wrong token type, or blacklisted
+- `422`: invalid payload
+
+### 3.5 Logout
+
+- Method: `POST`
+- Path: `/api/v1/auth/logout`
+- Auth required: Yes (`Authorization: Bearer <access_token>`)
+
+Request body:
 
 ```json
 {
-  "refresh_token": "..."
+  "refresh_token": "<jwt_refresh_token>"
 }
 ```
 
-- 成功回應：`200 OK`
-- Response JSON：
+Success response:
+
+- Status: `200 OK`
 
 ```json
 {
@@ -157,107 +210,120 @@ uvicorn main:app --reload --host 0.0.0.0 --port 18000
 }
 ```
 
-### 3.3 前端 Token 管理建議
+Behavior notes:
 
-- `access_token`：用於一般 API 請求，過期時間較短（預設 30 分鐘）
-- `refresh_token`：只用於換新 `access_token`（預設 7 天）
-- 每次 API 請求附帶 `Authorization: Bearer <access_token>`
-- 收到 `401` 且確認為 access token 過期時，呼叫 `/auth/refresh` 取得新 token 後重送原請求
-- 刷新失敗或 refresh token 失效時，清空本地登入狀態並導回登入頁
-- 登出時務必帶上目前 `access_token` 與 `refresh_token`
+- Both current access token and submitted refresh token are added to Redis blacklist with TTL.
+- Once blacklisted, tokens should be considered immediately invalid.
 
-### 3.4 常見錯誤碼對照
+## 4. Full Frontend Auth Flow
 
-- `400 Bad Request`：註冊資料衝突（email 或 username 已存在）
-- `401 Unauthorized`：帳密錯誤、Token 無效、Token 過期、Token 黑名單
-- `403 Forbidden`：未帶 Authorization header 存取保護端點
-- `404 Not Found`：使用者不存在（特定流程）
-- `422 Unprocessable Entity`：請求 JSON 格式錯或欄位驗證失敗
-- `429 Too Many Requests`：連續登入失敗達上限，帳號暫時鎖定
-- `500 Internal Server Error`：未處理例外
+### 4.1 First Login Flow
 
-## 4. 維護人員操作手冊
+1. User submits credentials.
+2. Frontend calls `POST /auth/login`.
+3. Frontend stores `access_token` and `refresh_token`.
+4. Frontend calls `GET /auth/me` to hydrate current user state if needed.
+5. Frontend routes user to authenticated pages.
 
-### 4.1 常用命令
+### 4.2 Authenticated API Request Flow
+
+1. Read `access_token`.
+2. Add header `Authorization: Bearer <access_token>`.
+3. If API returns 200, continue.
+4. If API returns 401, run refresh flow once.
+
+### 4.3 Refresh Flow
+
+1. Call `POST /auth/refresh` with `refresh_token`.
+2. If success, replace `access_token` and retry original request once.
+3. If refresh fails, clear local auth state and redirect to login.
+
+### 4.4 Logout Flow
+
+1. Call `POST /auth/logout` with both:
+- Header bearer access token
+- Body refresh token
+2. Regardless of API result, clear local tokens and user state.
+3. Redirect to login page.
+
+## 5. Recommended Frontend Token Storage Strategy
+
+Preferred:
+
+- Access token: memory store (or short-lived storage)
+- Refresh token: secure HTTP-only cookie if architecture supports it
+
+If using local storage/session storage, ensure:
+
+- strict XSS protection
+- token lifecycle handling
+- clear on logout and refresh failure
+
+## 6. Error Handling Matrix
+
+| HTTP | Typical Meaning | Frontend Action |
+|---|---|---|
+| 400 | Business rule violation (for example duplicate user, password byte limit) | Show validation/business error |
+| 401 | Token invalid/expired or credentials invalid | Attempt refresh once; if still 401, force relogin |
+| 403 | Missing Authorization header | Check request interceptor |
+| 404 | Resource/user not found | Show not found state |
+| 422 | Payload validation failed | Map backend validation to form fields |
+| 429 | Account locked due to repeated failures | Show lockout message and retry later |
+| 500 | Server-side unexpected exception | Show generic error and capture diagnostics |
+
+## 7. Practical Request Examples
+
+### cURL Login
 
 ```bash
-# 啟動全部服務
-docker compose up -d
-
-# 僅啟動資料庫與 Redis
-docker compose up -d postgres redis
-
-# 關閉並移除容器
-docker compose down
-
-# 關閉並清除 volume（重置資料）
-docker compose down -v
-
-# 看 app 日誌
-docker compose logs -f app
-
-# 執行測試
-pytest tests/ -v
-
-# coverage
-pytest tests/ --cov=app --cov-report=html --cov-report=term
+curl -X POST "http://localhost:18000/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "password": "SecurePass123!"
+  }'
 ```
 
-### 4.2 環境變數重點
+### cURL Current User
 
-- `DATABASE_URL`：PostgreSQL 連線字串
-- `REDIS_URL`：Redis 連線字串
-- `SECRET_KEY`：JWT 簽章密鑰，正式環境必須更換
-- `ACCESS_TOKEN_EXPIRE_MINUTES`：Access Token 有效時間
-- `REFRESH_TOKEN_EXPIRE_DAYS`：Refresh Token 有效天數
-- `MAX_LOGIN_ATTEMPTS`：錯誤登入嘗試上限（預設 5）
-- `LOCKOUT_DURATION_SECONDS`：帳號鎖定秒數（預設 900）
-- `APP_HOST_PORT`：主機對外埠（預設 18000）
+```bash
+curl -X GET "http://localhost:18000/api/v1/auth/me" \
+  -H "Authorization: Bearer <access_token>"
+```
 
-### 4.3 部署前檢查清單
+### cURL Refresh
 
-- `SECRET_KEY` 是否已替換為高強度值
-- CORS 是否限制為實際前端網域（目前程式為全開）
-- `DEBUG` 是否關閉
-- `LOG_LEVEL` 是否符合環境需求
-- `DATABASE_URL`、`REDIS_URL` 是否使用正式環境服務
-- Swagger (`/docs`) 是否依需求開放或限制
+```bash
+curl -X POST "http://localhost:18000/api/v1/auth/refresh" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh_token": "<refresh_token>"
+  }'
+```
 
-### 4.4 故障排查速查
+## 8. Frontend Change Impact Guide
 
-#### 問題：前端全部回 401
+When backend changes happen, verify these first:
 
-- 檢查前端是否使用過期 `access_token`
-- 檢查 `SECRET_KEY` 是否有變更（變更後舊 token 全失效）
-- 檢查 refresh token 是否已進入黑名單或過期
+1. Endpoint path or method changed
+2. Required request fields changed
+3. Response schema changed (including nested `user` fields)
+4. Error codes changed
+5. Token TTL changed
 
-#### 問題：登入回 429
+If any of the above changed, frontend must update:
 
-- 使用者達到錯誤登入上限
-- 等待 `LOCKOUT_DURATION_SECONDS` 後再試
-- 可進 Redis 查 `login_attempts:<user_id>`
+- API client typings/interfaces
+- form validation rules
+- auth interceptor/refresh logic
+- user state normalization logic
 
-#### 問題：服務起不來
+## 9. QA Scenarios Frontend Should Always Run
 
-- 確認 `.env` 必填值都存在
-- 檢查 postgres/redis healthcheck 狀態
-- 查看容器日誌：`docker compose logs -f app postgres redis`
-
-## 5. API 合約變更流程（建議）
-
-- 先更新 schema 與 router
-- 同步更新本文件與 `API_GUIDE.md`
-- 補對應測試（至少 happy path + 1 個 failure path）
-- 通知前端本次變更內容（欄位、錯誤碼、token 流程）
-
-## 6. 前端協作建議（避免踩雷）
-
-- 不要把 `refresh_token` 放在 URL query
-- 遇到 `401` 不要無限 refresh 重試，需有限次數與保護機制
-- `logout` 成功與否都應清空本地登入狀態
-- 優先依賴後端回傳 `detail` 顯示錯誤訊息
-
-## 7. 聯絡與交接備註
-
-- 若新增認證機制（OAuth、MFA、email verify），請先擴充本文件第 3 章與第 5 章
-- 若新增端點，請維持 `/api/v1` 版本前綴，避免破壞前端相容性
+1. Register success + duplicate email failure
+2. Login success + invalid password failure
+3. Access protected endpoint without token (`403`)
+4. Access protected endpoint with expired token (`401` then refresh)
+5. Refresh with invalid token (`401`, force logout)
+6. Logout then re-use old token (`401`)
+7. Lockout after repeated failed login (`429`)
