@@ -4,7 +4,10 @@
 
 ## 協作文件
 
-- 前端與維護交接手冊：`FRONTEND_MAINTAINER_GUIDE.md`
+- 前端 API 串接指南（English）：`FRONTEND_MAINTAINER_GUIDE.md`
+- 前端 API 串接指南（繁體中文）：`FRONTEND_MAINTAINER_GUIDE.zh-TW.md`
+- 後端內部開發者文件（English）：`BACKEND_INTERNAL_DEVELOPER_GUIDE.md`
+- 後端內部開發者文件（繁體中文）：`BACKEND_INTERNAL_DEVELOPER_GUIDE.zh-TW.md`
 
 ## 概述
 
@@ -171,6 +174,26 @@ uvicorn main:app --reload --host 0.0.0.0 --port $env:APP_PORT
 ```
 
 ## API 端點
+
+## 資料庫遷移
+
+這個專案已經接上 Alembic。當你修改 `app/models/` 裡的 ORM model 時，請用 migration 管理 schema 變更，不要只依賴啟動時的自動建表。
+
+常用指令：
+
+```bash
+make migrate
+make migrate-down
+make migrate-new message="add new column"
+```
+
+如果你在容器外直接執行，也可以用：
+
+```bash
+alembic upgrade head
+alembic downgrade -1
+alembic revision --autogenerate -m "add new column"
+```
 
 ### 認證相關
 
