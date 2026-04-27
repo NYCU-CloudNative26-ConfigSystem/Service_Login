@@ -9,6 +9,10 @@ from app.schemas.user import (
     TokenPayload,
     RefreshTokenRequest,
     ChangePasswordRequest,
+    MessageResponse,
+    EmailRequest,
+    EmailVerificationRequest,
+    ForgotPasswordResetRequest,
 )
 
 __all__ = [
@@ -21,4 +25,8 @@ __all__ = [
     "TokenPayload",
     "RefreshTokenRequest",
     "ChangePasswordRequest",
+    "MessageResponse",
+    "EmailRequest",
+    "EmailVerificationRequest",
+    "ForgotPasswordResetRequest",
 ]

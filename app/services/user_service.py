@@ -8,6 +8,7 @@ from app.core.exceptions import (
     InvalidCredentialsException,
     UserNotFoundException,
     UserAlreadyExistsException,
+    EmailNotVerifiedException,
 )
 from app.core.logging import logger
 from datetime import datetime
@@ -74,6 +75,10 @@ class UserService:
         if not user.is_active:
             logger.warning(f"Authentication failed: User {login_data.email} is not active")
             raise InvalidCredentialsException()
+
+        if not user.is_verified:
+            logger.warning(f"Authentication failed: User {login_data.email} is not verified")
+            raise EmailNotVerifiedException()
         
         logger.info(f"User authenticated successfully: {user.id}")
         return user
@@ -147,3 +152,31 @@ class UserService:
             self.db.rollback()
             logger.error(f"Error deactivating user: {e}")
             return False
+
+    def verify_user_email(self, email: str) -> User:
+        """Mark user email as verified."""
+        user = self.get_user_by_email(email)
+        try:
+            user.is_verified = True
+            self.db.commit()
+            self.db.refresh(user)
+            logger.info(f"User verified successfully: {user.id}")
+            return user
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error verifying user email: {e}")
+            raise
+
+    def reset_password_by_email(self, email: str, new_password: str) -> User:
+        """Reset user password directly by verified email flow."""
+        user = self.get_user_by_email(email)
+        try:
+            user.hashed_password = SecurityUtils.hash_password(new_password)
+            self.db.commit()
+            self.db.refresh(user)
+            logger.info(f"Password reset successfully for user: {user.id}")
+            return user
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error resetting password: {e}")
+            raise
