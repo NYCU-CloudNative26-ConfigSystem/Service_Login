@@ -471,7 +471,7 @@ alembic revision --autogenerate -m "describe_change"
 1. PostgreSQL 審計日誌 `audit_logs` 與 `AuditService`
 2. 註冊 email 驗證（Redis 驗證碼）
 3. 忘記密碼驗證與直接重設（Redis 驗證碼）
-4. Email provider 可切換（Mailtrap/Brevo/Amazon SES）
+4. Email provider 可切換（Mailtrap 官方 API / Brevo / Amazon SES）
 
 新增 API：
 

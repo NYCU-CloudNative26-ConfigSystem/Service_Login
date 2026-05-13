@@ -2,12 +2,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from email.mime.text import MIMEText
-import smtplib
+import os
 from typing import Optional
-
-import boto3
-import httpx
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -38,22 +34,40 @@ class MockEmailProvider(BaseEmailProvider):
 
 
 class MailtrapEmailProvider(BaseEmailProvider):
-    """SMTP sender compatible with Mailtrap."""
+    """Mailtrap transactional email sender using the official SDK."""
+
+    def __init__(self):
+        try:
+            import mailtrap as mt
+        except ImportError as exc:
+            raise RuntimeError(
+                "mailtrap package is required when EMAIL_PROVIDER=mailtrap"
+            ) from exc
+
+        if not settings.mailtrap_api_token:
+            raise RuntimeError("MAILTRAP_API_TOKEN is required when EMAIL_PROVIDER=mailtrap")
+
+        self._mt = mt
+        self._client = mt.MailtrapClient(token=settings.mailtrap_api_token)
 
     def send(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
-        msg = MIMEText(html_body, "html", "utf-8")
-        msg["Subject"] = subject
-        msg["From"] = settings.email_from
-        msg["To"] = to_email
-
         try:
-            with smtplib.SMTP(settings.mailtrap_host, settings.mailtrap_port, timeout=10) as server:
-                if settings.mailtrap_use_tls:
-                    server.starttls()
-                if settings.mailtrap_username and settings.mailtrap_password:
-                    server.login(settings.mailtrap_username, settings.mailtrap_password)
-                server.sendmail(settings.email_from, [to_email], msg.as_string())
-            return True
+            mail = self._mt.Mail(
+                sender=self._mt.Address(
+                    email=settings.email_from,
+                    name=settings.mailtrap_sender_name,
+                ),
+                to=[self._mt.Address(email=to_email)],
+                subject=subject,
+                text=text_body,
+                html=html_body,
+                category=settings.mailtrap_category,
+            )
+            response = self._client.send(mail)
+            success = response.get("success") if isinstance(response, dict) else getattr(response, "success", False)
+            if not success:
+                logger.error("Mailtrap email send failed: %s", response)
+            return bool(success)
         except Exception as exc:
             logger.error(f"Mailtrap email send failed: {exc}")
             return False
@@ -65,6 +79,12 @@ class BrevoEmailProvider(BaseEmailProvider):
     def send(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
         if not settings.brevo_api_key:
             logger.error("Brevo API key is missing")
+            return False
+
+        try:
+            import httpx
+        except ImportError as exc:
+            logger.error("httpx is required when EMAIL_PROVIDER=brevo: %s", exc)
             return False
 
         payload = {
@@ -98,6 +118,11 @@ class AmazonSESEmailProvider(BaseEmailProvider):
     """Amazon SES sender using boto3."""
 
     def __init__(self):
+        try:
+            import boto3
+        except ImportError as exc:
+            raise RuntimeError("boto3 is required when EMAIL_PROVIDER=ses") from exc
+
         kwargs = {
             "region_name": settings.ses_region,
         }
@@ -130,8 +155,15 @@ class EmailService:
 
     _provider: Optional[BaseEmailProvider] = None
 
+    @staticmethod
+    def _should_force_mock_provider() -> bool:
+        return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
     @classmethod
     def _build_provider(cls) -> BaseEmailProvider:
+        if cls._should_force_mock_provider():
+            return MockEmailProvider()
+
         provider = settings.email_provider.strip().lower()
 
         if provider == "mailtrap":
@@ -149,6 +181,14 @@ class EmailService:
         return cls._provider
 
     @classmethod
+    def _send_email(cls, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
+        try:
+            return cls._get_provider().send(to_email, subject, html_body, text_body)
+        except Exception as exc:
+            logger.error(f"Email send failed: {exc}")
+            return False
+
+    @classmethod
     def send_verification_code(cls, to_email: str, code: str) -> bool:
         subject = "Your email verification code"
         text_body = (
@@ -159,7 +199,7 @@ class EmailService:
             f"<p>Your verification code is <strong>{code}</strong>.</p>"
             f"<p>It will expire in {settings.email_verification_code_ttl_seconds // 60} minutes.</p>"
         )
-        return cls._get_provider().send(to_email, subject, html_body, text_body)
+        return cls._send_email(to_email, subject, html_body, text_body)
 
     @classmethod
     def send_password_reset_code(cls, to_email: str, code: str) -> bool:
@@ -172,4 +212,4 @@ class EmailService:
             f"<p>Your password reset code is <strong>{code}</strong>.</p>"
             f"<p>It will expire in {settings.password_reset_code_ttl_seconds // 60} minutes.</p>"
         )
-        return cls._get_provider().send(to_email, subject, html_body, text_body)
+        return cls._send_email(to_email, subject, html_body, text_body)

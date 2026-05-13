@@ -271,12 +271,14 @@ StatelessUser 模型有工廠方法。
 
 ### 已實作：可切換 Email Provider
 
-- `EMAIL_PROVIDER=mailtrap`：測試 SMTP inbox
+- `EMAIL_PROVIDER=mailtrap`：Mailtrap official API client
 - `EMAIL_PROVIDER=brevo`：Brevo transactional API
 - `EMAIL_PROVIDER=ses`：Amazon SES
 - `EMAIL_PROVIDER=mock`：本機/測試環境不發送外部信件
 
 可透過 `.env` 即時切換，不需改程式碼。
+
+測試執行時會強制使用 mock，不會因為 `.env` 設成 `mailtrap` 而真的送出外部信件。
 
 ### 添加 OAuth 2.0
 ```python

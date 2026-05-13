@@ -456,7 +456,7 @@ Implemented in this release:
 2. Registration email verification with Redis one-time code.
 3. Forgot-password flow with Redis one-time code and direct password reset.
 4. Email provider switching via env config:
-- `EMAIL_PROVIDER=mailtrap`
+- `EMAIL_PROVIDER=mailtrap` (official Mailtrap API client)
 - `EMAIL_PROVIDER=brevo`
 - `EMAIL_PROVIDER=ses`
 - `EMAIL_PROVIDER=mock` (tests/local)

@@ -28,12 +28,10 @@ class Settings(BaseSettings):
     email_provider: str = "mock"  # mock | mailtrap | brevo | ses
     email_from: str = "no-reply@example.com"
 
-    # Mailtrap (SMTP)
-    mailtrap_host: str = "sandbox.smtp.mailtrap.io"
-    mailtrap_port: int = 2525
-    mailtrap_username: Optional[str] = None
-    mailtrap_password: Optional[str] = None
-    mailtrap_use_tls: bool = True
+    # Mailtrap (official API client)
+    mailtrap_api_token: Optional[str] = None
+    mailtrap_sender_name: str = "Mailtrap Test"
+    mailtrap_category: str = "Authentication"
 
     # Brevo (SMTP API)
     brevo_api_key: Optional[str] = None

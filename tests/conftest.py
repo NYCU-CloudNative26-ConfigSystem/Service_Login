@@ -1,5 +1,8 @@
 """Test configuration and fixtures"""
+import os
 from pathlib import Path
+
+os.environ["EMAIL_PROVIDER"] = "mock"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from main import app
 from app.database.connection import get_db, Base
 from app.database.redis import redis_client
+from app.services.email_service import EmailService
 
 
 # Create test database
@@ -33,6 +37,8 @@ def test_db():
 @pytest.fixture(autouse=True)
 def reset_test_state():
     """Reset Redis and the SQLite test database around each test."""
+    EmailService._provider = None
+
     if redis_client._client is not None:
         redis_client._client.flushdb()
 
@@ -45,6 +51,7 @@ def reset_test_state():
         redis_client._client.flushdb()
 
     app.dependency_overrides.clear()
+    EmailService._provider = None
     engine.dispose()
     TEST_DB_PATH.unlink(missing_ok=True)
 

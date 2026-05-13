@@ -12,6 +12,7 @@ python-multipart==0.0.6
 pyjwt==2.12.1
 httpx==0.25.2
 boto3==1.37.38
+mailtrap==2.5.0
 pytest==7.4.3
 pytest-asyncio==0.21.1
 alembic==1.12.1
