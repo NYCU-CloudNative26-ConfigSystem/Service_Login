@@ -28,11 +28,14 @@ app/
     redis.py           # Redis 單例客戶端與操作封裝
   models/
     user.py            # 使用者資料表模型
+    audit_log.py       # 審計日誌資料表模型
   schemas/
     user.py            # Pydantic request/response DTO
   services/
     user_service.py    # 使用者業務邏輯
     auth_service.py    # token/session/登入失敗計數邏輯
+    audit_service.py   # 審計日誌寫入服務
+    email_service.py   # 可切換 email provider
   routers/
     auth.py            # HTTP 端點
 main.py                # FastAPI 啟動入口、middleware、event
@@ -171,6 +174,8 @@ alembic downgrade -1
 - `login_attempts:<user_id>` -> 失敗次數（TTL = `LOCKOUT_DURATION_SECONDS`）
 - `blacklist:<token>` -> `true`（TTL 依 token 壽命）
 - `cache:<key>` -> JSON 字串（泛用快取）
+- `email_code:register:<email>` -> 註冊驗證碼（TTL = `EMAIL_VERIFICATION_CODE_TTL_SECONDS`）
+- `email_code:password_reset:<email>` -> 忘記密碼驗證碼（TTL = `PASSWORD_RESET_CODE_TTL_SECONDS`）
 
 維運影響：
 
@@ -199,6 +204,7 @@ API 前綴：`/api/v1/auth`
 - 依 email 查使用者
 - 檢查 Redis 鎖定計數
 - 驗證密碼與 `is_active`
+- 驗證 `is_verified`，未驗證會回傳 `403`
 - 成功時清除登入失敗計數
 - 更新 `last_login_at`
 - 產生 access/refresh token 並回傳
@@ -233,13 +239,11 @@ API 前綴：`/api/v1/auth`
 - Header 需帶 access token
 - Body 需帶 refresh token
 - 將兩者都加入黑名單
-- 呼叫 `AuthService.destroy_session(...)`
 
 實作注意：
 
 - 目前登入主流程並未建立 session 作為 bearer 驗證依據
-- `destroy_session` 預期參數是 session id，但 router 傳入 `current_user_id`
-- 因此目前主要失效機制是黑名單，而非 session 刪除
+- 因此目前主要失效機制是 token 黑名單
 
 ### 5.6 例外與錯誤碼規範
 
@@ -456,10 +460,25 @@ alembic revision --autogenerate -m "describe_change"
 ## 11. 已知技術債與改善建議
 
 1. 目前 session 方法存在，但登入驗證主流程未使用 session id
-2. logout 目前將 user id 傳給 `destroy_session`，參數語義不一致
-3. `main.py` 啟動時會 `Base.metadata.create_all(...)`，若採嚴格 migration 管理可考慮改為 Alembic 單一路徑
-4. CORS 現為 allow-all，正式環境應限制白名單
-5. 建議在 route 補 `responses={...}` 提升 Swagger 錯誤文件可讀性
+2. `main.py` 啟動時會 `Base.metadata.create_all(...)`，若採嚴格 migration 管理可考慮改為 Alembic 單一路徑
+3. CORS 現為 allow-all，正式環境應限制白名單
+4. 建議在 route 補 `responses={...}` 提升 Swagger 錯誤文件可讀性
+
+## 功能更新（2026-04-27）
+
+本次版本已實作：
+
+1. PostgreSQL 審計日誌 `audit_logs` 與 `AuditService`
+2. 註冊 email 驗證（Redis 驗證碼）
+3. 忘記密碼驗證與直接重設（Redis 驗證碼）
+4. Email provider 可切換（Mailtrap 官方 API / Brevo / Amazon SES）
+
+新增 API：
+
+- `POST /api/v1/auth/verify-email/request`
+- `POST /api/v1/auth/verify-email/confirm`
+- `POST /api/v1/auth/forgot-password/request`
+- `POST /api/v1/auth/forgot-password/reset`
 
 ## 12. 發版前檢查清單
 

@@ -31,6 +31,29 @@ curl -X POST "http://localhost:18000/api/v1/auth/register" \
   }'
 ```
 
+註冊後會自動寄出 email 驗證碼，帳號在驗證前不可登入。
+
+### 2.1 重寄註冊驗證碼
+
+```bash
+curl -X POST "http://localhost:18000/api/v1/auth/verify-email/request" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com"
+  }'
+```
+
+### 2.2 確認註冊驗證碼
+
+```bash
+curl -X POST "http://localhost:18000/api/v1/auth/verify-email/confirm" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "code": "123456"
+  }'
+```
+
 ### 3. 登錄
 
 ```bash
@@ -83,6 +106,7 @@ curl -X POST "http://localhost:18000/api/v1/auth/logout" \
 - 用戶身份信息（email、username、密碼哈希）
 - 用戶資料（名稱、創建時間等）
 - 用戶狀態（是否激活、驗證狀態）
+- 審計日誌（誰、在何時、做了什麼）
 
 #### Redis（動態會話和狀態）
 **優點**
@@ -95,6 +119,8 @@ curl -X POST "http://localhost:18000/api/v1/auth/logout" \
 - 用戶會話（session_id → user_id，24h 過期）
 - 登錄嘗試計數（防暴力破解）
 - 臨時緩存數據
+- 註冊驗證碼（`email_code:register:{email}`）
+- 忘記密碼驗證碼（`email_code:password_reset:{email}`）
 
 ### 數據流示例
 
@@ -103,7 +129,7 @@ curl -X POST "http://localhost:18000/api/v1/auth/logout" \
 1. 用戶發送登錄請求 → API
 2. API 查詢 PostgreSQL 驗證用戶身份
 3. 檢查 Redis 中的登錄嘗試次數 → 檢查是否被鎖定
-4. 如驗證成功：
+4. 如驗證成功且 `is_verified=true`：
    - 清除 Redis 中的登錄嘗試計數
    - 生成 JWT Token
    - 返回 access_token 和 refresh_token
@@ -111,6 +137,14 @@ curl -X POST "http://localhost:18000/api/v1/auth/logout" \
    - 增加 Redis 中的嘗試計數
    - 如果超過 5 次，鎖定賬戶 15 分鐘
    - 返回 401 錯誤
+
+**忘記密碼流程：**
+```
+1. 用戶提交 email → POST /forgot-password/request
+2. API 將 6 位碼存入 Redis（TTL）並寄送 email
+3. 用戶提交 email + code + new_password → POST /forgot-password/reset
+4. API 驗證 Redis code，成功後直接更新密碼
+```
 ```
 
 **訪問受保護資源：**
@@ -224,12 +258,27 @@ StatelessUser 模型有工廠方法。
 
 ## 常見擴展
 
-### 添加電子郵件驗證
-```python
-# 在 User 模型添加 email_verified 字段
-# 在 Redis 存儲驗證碼
-# 發送驗證郵件
-```
+### 已實作：電子郵件驗證
+
+- 註冊時自動寄出驗證碼
+- `/verify-email/request` 可重寄
+- `/verify-email/confirm` 驗證成功後把 `users.is_verified` 設為 `true`
+
+### 已實作：忘記密碼
+
+- `/forgot-password/request` 寄送重設碼
+- `/forgot-password/reset` 驗證碼通過後直接修改密碼
+
+### 已實作：可切換 Email Provider
+
+- `EMAIL_PROVIDER=mailtrap`：Mailtrap official API client
+- `EMAIL_PROVIDER=brevo`：Brevo transactional API
+- `EMAIL_PROVIDER=ses`：Amazon SES
+- `EMAIL_PROVIDER=mock`：本機/測試環境不發送外部信件
+
+可透過 `.env` 即時切換，不需改程式碼。
+
+測試執行時會強制使用 mock，不會因為 `.env` 設成 `mailtrap` 而真的送出外部信件。
 
 ### 添加 OAuth 2.0
 ```python
@@ -264,6 +313,12 @@ docker-compose logs redis
 ### 查看應用日誌
 ```bash
 docker-compose logs app
+```
+
+### 查詢審計日誌（PostgreSQL）
+
+```bash
+docker-compose exec postgres psql -U user -d auth_service -c "SELECT action, email, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 20;"
 ```
 
 ### 進入 PostgreSQL 容器

@@ -73,3 +73,43 @@ class NotAuthorizedException(HTTPException):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized",
         )
+
+
+class EmailNotVerifiedException(HTTPException):
+    """Raised when user attempts login before verifying email."""
+
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email is not verified",
+        )
+
+
+class VerificationCodeInvalidException(HTTPException):
+    """Raised when one-time verification code does not match."""
+
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification code",
+        )
+
+
+class VerificationCodeExpiredException(HTTPException):
+    """Raised when one-time verification code has expired or not found."""
+
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code expired or not found",
+        )
+
+
+class EmailDeliveryFailedException(HTTPException):
+    """Raised when email provider cannot send messages."""
+
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send verification email",
+        )

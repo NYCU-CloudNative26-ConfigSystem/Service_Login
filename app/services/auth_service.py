@@ -1,9 +1,18 @@
 """Authentication service - handles session and token management"""
+import secrets
+
 from app.database.redis import redis_client
 from app.utils.security import SecurityUtils
-from app.core.exceptions import InvalidTokenException, AccountLockedException
+from app.core.exceptions import (
+    InvalidTokenException,
+    AccountLockedException,
+    VerificationCodeInvalidException,
+    VerificationCodeExpiredException,
+    EmailDeliveryFailedException,
+)
 from app.core.config import settings
 from app.core.logging import logger
+from app.services.email_service import EmailService
 import uuid
 
 
@@ -124,3 +133,60 @@ class AuthService:
     def is_token_blacklisted(token: str) -> bool:
         """Check if token is blacklisted"""
         return redis_client.is_token_blacklisted(token)
+
+    @staticmethod
+    def _generate_numeric_code(length: int = 6) -> str:
+        alphabet = "0123456789"
+        return "".join(secrets.choice(alphabet) for _ in range(length))
+
+    @staticmethod
+    def send_email_verification_code(email: str) -> None:
+        """Generate and send registration email verification code."""
+        code = AuthService._generate_numeric_code()
+        success = redis_client.set_email_code(
+            purpose="register",
+            email=email,
+            code=code,
+            ttl=settings.email_verification_code_ttl_seconds,
+        )
+        if not success:
+            raise Exception("Failed to persist email verification code")
+
+        if not EmailService.send_verification_code(email, code):
+            raise EmailDeliveryFailedException()
+
+    @staticmethod
+    def verify_email_code(email: str, code: str) -> None:
+        """Validate and consume registration email verification code."""
+        expected = redis_client.get_email_code(purpose="register", email=email)
+        if expected is None:
+            raise VerificationCodeExpiredException()
+        if expected != code:
+            raise VerificationCodeInvalidException()
+        redis_client.delete_email_code(purpose="register", email=email)
+
+    @staticmethod
+    def send_password_reset_code(email: str) -> None:
+        """Generate and send password reset verification code."""
+        code = AuthService._generate_numeric_code()
+        success = redis_client.set_email_code(
+            purpose="password_reset",
+            email=email,
+            code=code,
+            ttl=settings.password_reset_code_ttl_seconds,
+        )
+        if not success:
+            raise Exception("Failed to persist password reset code")
+
+        if not EmailService.send_password_reset_code(email, code):
+            raise EmailDeliveryFailedException()
+
+    @staticmethod
+    def verify_password_reset_code(email: str, code: str) -> None:
+        """Validate and consume password reset code."""
+        expected = redis_client.get_email_code(purpose="password_reset", email=email)
+        if expected is None:
+            raise VerificationCodeExpiredException()
+        if expected != code:
+            raise VerificationCodeInvalidException()
+        redis_client.delete_email_code(purpose="password_reset", email=email)

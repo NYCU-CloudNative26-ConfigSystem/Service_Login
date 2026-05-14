@@ -7,9 +7,11 @@
 此服務提供：
 
 - 使用者註冊
+- 註冊電子郵件驗證
 - 使用者登入
 - JWT 驗證（Access Token）
 - Access Token 刷新
+- 忘記密碼（使用 email 驗證碼）
 - 登出與 Token 黑名單
 - 取得目前登入使用者資訊
 
@@ -94,6 +96,47 @@ Request Body：
 - `400`：email 或 username 重複
 - `422`：欄位缺漏或格式不正確
 
+行為說明：
+
+- 註冊後會自動寄出驗證碼，完成驗證前不可登入。
+
+### 3.1.1 重寄註冊驗證碼
+
+- Method：`POST`
+- Path：`/api/v1/auth/verify-email/request`
+- 是否需要登入：否
+
+Request Body：
+
+```json
+{
+  "email": "john@example.com"
+}
+```
+
+### 3.1.2 確認註冊驗證碼
+
+- Method：`POST`
+- Path：`/api/v1/auth/verify-email/confirm`
+- 是否需要登入：否
+
+Request Body：
+
+```json
+{
+  "email": "john@example.com",
+  "code": "123456"
+}
+```
+
+成功回應：
+
+```json
+{
+  "message": "Email verified successfully"
+}
+```
+
 ### 3.2 登入
 
 - Method：`POST`
@@ -137,6 +180,7 @@ Request Body：
 常見錯誤：
 
 - `401`：帳密錯誤或 Token 相關驗證失敗
+- `403`：email 尚未驗證
 - `429`：登入失敗次數過多，帳號暫時鎖定
 - `422`：請求格式不符
 
@@ -215,15 +259,72 @@ Request Body：
 - 目前的 access token 與 refresh token 都會加入 Redis 黑名單（有 TTL）。
 - 加入黑名單後，該 token 應視為立即失效。
 
+### 3.6 忘記密碼：請求驗證碼
+
+- Method：`POST`
+- Path：`/api/v1/auth/forgot-password/request`
+- 是否需要登入：否
+
+Request Body：
+
+```json
+{
+  "email": "john@example.com"
+}
+```
+
+成功回應：
+
+```json
+{
+  "message": "If the email exists, a reset code has been sent"
+}
+```
+
+### 3.7 忘記密碼：驗證碼重設密碼
+
+- Method：`POST`
+- Path：`/api/v1/auth/forgot-password/reset`
+- 是否需要登入：否
+
+Request Body：
+
+```json
+{
+  "email": "john@example.com",
+  "code": "654321",
+  "new_password": "NewSecurePass123!"
+}
+```
+
+成功回應：
+
+```json
+{
+  "message": "Password reset successfully"
+}
+```
+
 ## 4. 前端完整登入流程
 
 ### 4.1 首次登入流程
 
 1. 使用者輸入帳號密碼。
-2. 前端呼叫 `POST /auth/login`。
-3. 前端保存 `access_token` 與 `refresh_token`。
-4. 視需求呼叫 `GET /auth/me` 初始化使用者狀態。
-5. 導向登入後頁面。
+2. 若是新用戶，先呼叫 `POST /auth/register`。
+3. 前端要求使用者輸入驗證碼。
+4. 呼叫 `POST /auth/verify-email/confirm`。
+5. 呼叫 `POST /auth/login`。
+6. 前端保存 `access_token` 與 `refresh_token`。
+7. 視需求呼叫 `GET /auth/me` 初始化使用者狀態。
+8. 導向登入後頁面。
+
+### 4.5 忘記密碼流程
+
+1. 使用者輸入 email。
+2. 呼叫 `POST /auth/forgot-password/request`。
+3. 使用者輸入 email 驗證碼與新密碼。
+4. 呼叫 `POST /auth/forgot-password/reset`。
+5. 導回登入頁，使用新密碼登入。
 
 ### 4.2 已登入請求流程
 
@@ -265,7 +366,7 @@ Request Body：
 |---|---|---|
 | 400 | 商業規則錯誤（如帳號重複、密碼位元組過長） | 顯示可理解錯誤訊息 |
 | 401 | Token 無效/過期或帳密錯誤 | 先 refresh 一次，仍失敗則強制重登入 |
-| 403 | Authorization Header 缺失 | 檢查 request interceptor |
+| 403 | Authorization Header 缺失或 email 尚未驗證 | 檢查 interceptor 或導向驗證流程 |
 | 404 | 資源或使用者不存在 | 顯示 not found 狀態 |
 | 422 | 欄位驗證失敗 | 映射至表單欄位錯誤 |
 | 429 | 連續登入失敗導致鎖定 | 顯示鎖定提示，稍後再試 |
@@ -321,9 +422,11 @@ curl -X POST "http://localhost:18000/api/v1/auth/refresh" \
 ## 9. 前端每次發版建議驗證場景
 
 1. 註冊成功與重複帳號失敗
-2. 登入成功與錯誤密碼失敗
-3. 無 token 存取保護端點（`403`）
-4. 過期 token 存取保護端點（`401` 後 refresh）
-5. 無效 refresh token（`401`，強制登出）
-6. 登出後重用舊 token（`401`）
-7. 多次登入失敗達鎖定（`429`）
+2. 未驗證 email 前登入被阻擋（`403`）
+3. 驗證碼確認成功後可登入
+4. 忘記密碼流程：請求驗證碼、重設成功、用新密碼登入
+5. 無 token 存取保護端點（`403`）
+6. 過期 token 存取保護端點（`401` 後 refresh）
+7. 無效 refresh token（`401`，強制登出）
+8. 登出後重用舊 token（`401`）
+9. 多次登入失敗達鎖定（`429`）

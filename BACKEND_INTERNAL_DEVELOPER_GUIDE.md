@@ -28,11 +28,14 @@ app/
     redis.py           # singleton redis client + helpers
   models/
     user.py            # SQLAlchemy user model
+    audit_log.py       # SQLAlchemy audit log model
   schemas/
     user.py            # pydantic request/response DTOs
   services/
     user_service.py    # user business logic
     auth_service.py    # token/session/login-attempt logic
+    audit_service.py   # PostgreSQL audit log writer
+    email_service.py   # switchable email providers
   routers/
     auth.py            # HTTP endpoints
 main.py                # FastAPI app bootstrap + middleware + events
@@ -165,6 +168,8 @@ Redis keys used by current implementation:
 - `login_attempts:<user_id>` -> integer counter (TTL = `LOCKOUT_DURATION_SECONDS`)
 - `blacklist:<token>` -> `true` (TTL based on token lifetime)
 - `cache:<key>` -> JSON blob (generic helper, not heavily used in current auth routes)
+- `email_code:register:<email>` -> 6-digit verification code (TTL = `EMAIL_VERIFICATION_CODE_TTL_SECONDS`)
+- `email_code:password_reset:<email>` -> 6-digit reset code (TTL = `PASSWORD_RESET_CODE_TTL_SECONDS`)
 
 Operational implications:
 
@@ -189,6 +194,7 @@ All endpoints are under `/api/v1/auth`.
 - Retrieves user by email.
 - Checks lockout counter in Redis.
 - Validates password and active status.
+- Requires `user.is_verified == true`.
 - Clears login-attempt counter on success.
 - Updates `last_login_at`.
 - Returns access/refresh tokens + user.
@@ -217,13 +223,11 @@ Failure flow:
 - Requires access bearer token header.
 - Requires refresh token in body.
 - Blacklists both access + refresh tokens in Redis.
-- Calls `AuthService.destroy_session(...)`.
 
 Important implementation note:
 
-- Login flow currently does not create sessions for bearer authentication.
-- `destroy_session` expects a session id but router currently passes `current_user_id`.
-- Effective auth invalidation behavior is token blacklist, not session deletion.
+- Effective auth invalidation behavior is token blacklist.
+- Session helper methods are available but are not the primary auth source of truth.
 
 ### 5.6 Error Contract
 
@@ -440,10 +444,29 @@ Issue: Migration mismatch.
 ## 11. Known Technical Debt And Improvement Suggestions
 
 1. Session lifecycle methods exist but bearer login flow does not rely on session ids.
-2. Logout currently passes user id to `destroy_session`, while method expects session id.
-3. `main.py` startup currently runs `Base.metadata.create_all(...)`; in strict migration-driven environments this is often disabled in favor of Alembic-only schema control.
-4. CORS is currently allow-all; production should restrict origins.
-5. Add explicit API response docs (`responses={...}`) to improve Swagger error clarity.
+2. `main.py` startup currently runs `Base.metadata.create_all(...)`; in strict migration-driven environments this is often disabled in favor of Alembic-only schema control.
+3. CORS is currently allow-all; production should restrict origins.
+4. Add explicit API response docs (`responses={...}`) to improve Swagger error clarity.
+
+## Feature Update (2026-04-27)
+
+Implemented in this release:
+
+1. PostgreSQL audit log table `audit_logs` and `AuditService`.
+2. Registration email verification with Redis one-time code.
+3. Forgot-password flow with Redis one-time code and direct password reset.
+4. Email provider switching via env config:
+- `EMAIL_PROVIDER=mailtrap` (official Mailtrap API client)
+- `EMAIL_PROVIDER=brevo`
+- `EMAIL_PROVIDER=ses`
+- `EMAIL_PROVIDER=mock` (tests/local)
+
+New auth endpoints:
+
+- `POST /api/v1/auth/verify-email/request`
+- `POST /api/v1/auth/verify-email/confirm`
+- `POST /api/v1/auth/forgot-password/request`
+- `POST /api/v1/auth/forgot-password/reset`
 
 ## 12. Release Checklist
 

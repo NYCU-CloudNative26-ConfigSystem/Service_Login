@@ -1,6 +1,4 @@
 """Redis connection management"""
-import token
-
 import redis
 import json
 from typing import Optional, Any
@@ -40,6 +38,39 @@ class RedisClient:
             return True
         except Exception as e:
             logger.error(f"Error setting session: {e}")
+            return False
+
+    @staticmethod
+    def _normalize_email(email: str) -> str:
+        return email.strip().lower()
+
+    def set_email_code(self, purpose: str, email: str, code: str, ttl: int) -> bool:
+        """Store one-time code for email verification or password reset."""
+        try:
+            key = f"email_code:{purpose}:{self._normalize_email(email)}"
+            self._client.setex(key, ttl, code)
+            return True
+        except Exception as e:
+            logger.error(f"Error setting email code: {e}")
+            return False
+
+    def get_email_code(self, purpose: str, email: str) -> Optional[str]:
+        """Get one-time code for a specific purpose and email."""
+        try:
+            key = f"email_code:{purpose}:{self._normalize_email(email)}"
+            return self._client.get(key)
+        except Exception as e:
+            logger.error(f"Error getting email code: {e}")
+            return None
+
+    def delete_email_code(self, purpose: str, email: str) -> bool:
+        """Delete one-time code after successful verification."""
+        try:
+            key = f"email_code:{purpose}:{self._normalize_email(email)}"
+            self._client.delete(key)
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting email code: {e}")
             return False
     
     def get_session(self, session_id: str) -> Optional[int]:

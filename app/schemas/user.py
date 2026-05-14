@@ -67,3 +67,30 @@ class ChangePasswordRequest(BaseModel):
     """Request schema for changing password"""
     old_password: str
     new_password: str = Field(..., min_length=8)
+
+
+class MessageResponse(BaseModel):
+    """Generic response schema for successful operations."""
+
+    message: str
+
+
+class EmailRequest(BaseModel):
+    """Request schema containing an email address."""
+
+    email: EmailStr
+
+
+class EmailVerificationRequest(BaseModel):
+    """Request schema for confirming email with code."""
+
+    email: EmailStr
+    code: str = Field(..., min_length=4, max_length=12)
+
+
+class ForgotPasswordResetRequest(BaseModel):
+    """Request schema for resetting password using email code."""
+
+    email: EmailStr
+    code: str = Field(..., min_length=4, max_length=12)
+    new_password: str = Field(..., min_length=8)

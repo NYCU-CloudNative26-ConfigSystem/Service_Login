@@ -17,6 +17,8 @@
 - **PostgreSQL**：存儲用戶身份信息（靜態數據）
 - **Redis**：管理會話和登錄狀態（動態數據）
 - **JWT**：安全的令牌認證
+- **電子郵件驗證與忘記密碼**：使用 Redis 一次性驗證碼
+- **審計日誌**：PostgreSQL `audit_logs` 記錄誰在何時做了什麼
 - **高可維護性**：清晰的架構和分離關注點
 
 ## 架構設計
@@ -75,7 +77,19 @@ cloud-naive/
 session:{session_id} → user_id               # 用戶會話（TTL: 24h）
 login_attempts:{user_id} → count             # 登錄嘗試計數（TTL: 15m）
 cache:{key} → value                          # 通用緩存
+email_code:register:{email} → 6-digit code   # 註冊驗證碼（TTL 可配置）
+email_code:password_reset:{email} → code     # 忘記密碼驗證碼（TTL 可配置）
 ```
+
+#### PostgreSQL（審計日誌）
+
+`audit_logs` 會記錄安全敏感操作，例如：
+
+- REGISTER
+- EMAIL_VERIFIED
+- LOGIN_SUCCESS / LOGIN_FAILED
+- PASSWORD_RESET_CODE_SENT / PASSWORD_RESET_SUCCESS
+- LOGOUT / TOKEN_REFRESH
 
 ## 快速開始
 
@@ -224,6 +238,36 @@ Response (201):
 }
 ```
 
+註冊成功後系統會自動寄出 email 驗證碼，使用者需要完成驗證後才能登入。
+
+#### 請求註冊驗證碼（重寄）
+
+```
+POST /api/v1/auth/verify-email/request
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+```
+
+#### 確認電子郵件驗證
+
+```
+POST /api/v1/auth/verify-email/confirm
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "code": "123456"
+}
+
+Response (200):
+{
+  "message": "Email verified successfully"
+}
+```
+
 #### 登錄
 
 ```
@@ -243,6 +287,8 @@ Response (200):
   "user": { ... }
 }
 ```
+
+若尚未完成 email 驗證，會回傳 `403 Email is not verified`。
 
 #### 獲取當前用戶
 
@@ -284,6 +330,40 @@ Authorization: Bearer {access_token}
 Response (200):
 {
   "message": "Logged out successfully"
+}
+```
+
+#### 忘記密碼：請求驗證碼
+
+```
+POST /api/v1/auth/forgot-password/request
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+
+Response (200):
+{
+  "message": "If the email exists, a reset code has been sent"
+}
+```
+
+#### 忘記密碼：使用驗證碼重設
+
+```
+POST /api/v1/auth/forgot-password/reset
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "code": "654321",
+  "new_password": "newsecurepassword123"
+}
+
+Response (200):
+{
+  "message": "Password reset successfully"
 }
 ```
 
@@ -329,6 +409,27 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
+# Email 驗證碼 TTL（秒）
+EMAIL_VERIFICATION_CODE_TTL_SECONDS=600
+PASSWORD_RESET_CODE_TTL_SECONDS=600
+
+# Email provider: mock | mailtrap | brevo | ses
+EMAIL_PROVIDER=mock
+EMAIL_FROM=no-reply@example.com
+
+# Mailtrap (official API client)
+MAILTRAP_API_TOKEN=
+MAILTRAP_SENDER_NAME=Mailtrap Test
+MAILTRAP_CATEGORY=Authentication
+
+# Brevo
+BREVO_API_KEY=
+
+# Amazon SES
+SES_REGION=us-east-1
+SES_ACCESS_KEY_ID=
+SES_SECRET_ACCESS_KEY=
+
 # 應用
 APP_NAME=Login Service
 DEBUG=False
@@ -346,7 +447,9 @@ SESSION_EXPIRE_SECONDS=86400
 
 - **401 Unauthorized**：無效或過期的認證信息
 - **400 Bad Request**：用戶已存在等驗證失敗
+- **400 Bad Request**：驗證碼錯誤/過期、用戶已存在等
 - **404 Not Found**：用戶不存在
+- **403 Forbidden**：尚未完成 email 驗證
 - **429 Too Many Requests**：賬戶由於登錄嘗試過多被鎖定
 
 ## 日誌記錄
@@ -372,7 +475,7 @@ pytest
 ### 運行特定測試
 
 ```bash
-pytest tests/test_auth.py::TestAuthEndpoints::test_login_success -v
+pytest tests/test_auth.py::TestAuthEndpoints::test_email_verification_then_login_success -v
 ```
 
 ### 生成覆蓋率報告
@@ -448,11 +551,8 @@ pytest --cov=app tests/
 
 ### 可輕鬆添加的功能：
 
-1. 電子郵件驗證
-2. 忘記密碼功能
-3. 雙因素認證 (2FA)
-4. OAuth 2.0 集成
-5. 用戶角色和權限
-6. 審計日誌
-7. IP 白名單
-8. 設備管理
+1. 雙因素認證 (2FA)
+2. OAuth 2.0 集成
+3. 用戶角色和權限
+4. IP 白名單
+5. 設備管理
