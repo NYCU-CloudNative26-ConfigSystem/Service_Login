@@ -48,21 +48,32 @@ class MailtrapEmailProvider(BaseEmailProvider):
             raise RuntimeError("MAILTRAP_API_TOKEN is required when EMAIL_PROVIDER=mailtrap")
 
         self._mt = mt
-        self._client = mt.MailtrapClient(token=settings.mailtrap_api_token)
+        self._client = mt.MailtrapClient(token=settings.mailtrap_api_token, sandbox=True, inbox_id=4624956)
 
     def send(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
         try:
+            # mail = self._mt.Mail(
+            #     sender=self._mt.Address(
+            #         email=settings.email_from,
+            #         name=settings.mailtrap_sender_name,
+            #     ),
+            #     to=[self._mt.Address(email=to_email)],
+            #     subject=subject,
+            #     text=text_body,
+            #     html=html_body,
+            #     category=settings.mailtrap_category,
+            # )
+            # response = self._client.send(mail)
+
             mail = self._mt.Mail(
-                sender=self._mt.Address(
-                    email=settings.email_from,
-                    name=settings.mailtrap_sender_name,
-                ),
+                sender=self._mt.Address(email=settings.email_from, name=settings.mailtrap_sender_name),
                 to=[self._mt.Address(email=to_email)],
                 subject=subject,
                 text=text_body,
                 html=html_body,
                 category=settings.mailtrap_category,
             )
+
             response = self._client.send(mail)
             success = response.get("success") if isinstance(response, dict) else getattr(response, "success", False)
             if not success:
