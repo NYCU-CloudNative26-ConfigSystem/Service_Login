@@ -10,6 +10,7 @@ class UserRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = Field(None, max_length=255)
+    company: str = Field(..., min_length=1, max_length=255)
 
 
 class UserLoginRequest(BaseModel):
@@ -28,6 +29,7 @@ class UserResponse(BaseModel):
     email: str
     username: str
     full_name: Optional[str]
+    company: str
     is_active: bool
     is_verified: bool
     created_at: datetime

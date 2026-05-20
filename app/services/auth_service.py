@@ -70,37 +70,41 @@ class AuthService:
             raise AccountLockedException()
     
     @staticmethod
-    def create_tokens(user_id: int) -> dict:
+    def create_tokens(user_id: int, company: str = "") -> dict:
         """Create both access and refresh tokens"""
         logger.info(f"Creating tokens for user: {user_id}")
-        
-        access_token = SecurityUtils.create_access_token(user_id)
-        refresh_token = SecurityUtils.create_refresh_token(user_id)
-        
+
+        session_id = AuthService.create_session(user_id)
+        access_token = SecurityUtils.create_access_token(user_id, company=company, session_id=session_id)
+        refresh_token = SecurityUtils.create_refresh_token(user_id, company=company)
+
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
+            "session_id": session_id,
         }
     
     @staticmethod
     def refresh_access_token(refresh_token: str) -> str:
         """Create new access token from refresh token"""
         logger.info("Refreshing access token")
-        
+
         payload = SecurityUtils.decode_token(refresh_token, token_type="refresh")
-        
+
         if not payload:
             logger.warning("Invalid refresh token")
             raise InvalidTokenException()
-        
+
         user_id = payload.get("sub")
         if not user_id:
             logger.warning("Invalid refresh token payload")
             raise InvalidTokenException()
-        
-        new_access_token = SecurityUtils.create_access_token(user_id)
+
+        company = payload.get("company", "")
+        session_id = AuthService.create_session(user_id)
+        new_access_token = SecurityUtils.create_access_token(user_id, company=company, session_id=session_id)
         logger.info(f"Access token refreshed for user: {user_id}")
-        
+
         return new_access_token
 
     @staticmethod
