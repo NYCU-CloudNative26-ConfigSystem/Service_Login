@@ -54,6 +54,9 @@ shell:
 test:
 	pytest tests/ -v
 
+test-docker:
+	docker-compose --profile test run --rm test
+
 coverage:
 	pytest tests/ --cov=app --cov-report=html --cov-report=term
 	@echo "Coverage 報告在 htmlcov/index.html"
