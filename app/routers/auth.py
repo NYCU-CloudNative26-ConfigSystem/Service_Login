@@ -87,12 +87,12 @@ async def login(
         user_service.update_last_login(user.id)
         
         # Create tokens
-        tokens = AuthService.create_tokens(user.id, company=user.company)
+        tokens = AuthService.create_tokens(user.id, company=user.company, username=user.username)
         
         logger.info(f"Login successful for user: {user.id}")
-        
+        access_token = tokens["access_token"]
         return LoginResponse(
-            access_token=tokens["access_token"],
+            access_token=access_token,
             refresh_token=tokens["refresh_token"],
             user=UserResponse.model_validate(user),
         )
