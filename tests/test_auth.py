@@ -127,13 +127,30 @@ class TestAuthEndpoints:
         assert response.status_code == 401
 
     def test_login_jwt_contains_company_and_sid(self, client):
-        """Test that login issues a JWT with company and sid claims"""
+        """Test that login issues a JWT with company, sid, and role claims"""
         _register(client)
         token = _login(client).json()["access_token"]
         payload = SecurityUtils.decode_token(token)
 
         assert payload["company"] == "TestCo"
         assert payload["sid"] != ""
+        assert payload["role"] == "user"  # default role at registration
+
+    def test_register_with_reviewer_role(self, client):
+        """Test that registering with role=reviewer is stored and reflected in JWT"""
+        client.post("/api/v1/auth/register", json={
+            "email": "rev@example.com",
+            "username": "rev_user",
+            "password": "securepassword123",
+            "company": "RevCo",
+            "role": "reviewer",
+        })
+        token = client.post("/api/v1/auth/login", json={
+            "email": "rev@example.com",
+            "password": "securepassword123",
+        }).json()["access_token"]
+        payload = SecurityUtils.decode_token(token)
+        assert payload["role"] == "reviewer"
 
     def test_session_lifecycle(self, client):
         """Test that session is created on login and destroyed on logout"""
