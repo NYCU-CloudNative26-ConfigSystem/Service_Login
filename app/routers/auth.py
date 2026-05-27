@@ -87,12 +87,12 @@ async def login(
         user_service.update_last_login(user.id)
         
         # Create tokens
-        tokens = AuthService.create_tokens(user.id)
+        tokens = AuthService.create_tokens(user.id, company=user.company, username=user.username, role=user.role)
         
         logger.info(f"Login successful for user: {user.id}")
-        
+        access_token = tokens["access_token"]
         return LoginResponse(
-            access_token=tokens["access_token"],
+            access_token=access_token,
             refresh_token=tokens["refresh_token"],
             user=UserResponse.model_validate(user),
         )
@@ -117,10 +117,13 @@ async def logout(
     
     # In this implementation, logout just invalidates the JWT token
     # If you want to maintain a blacklist, you can store the token in Redis with expiration
-    try: 
+    try:
         access_token = http_request.headers.get("Authorization", "").replace("Bearer ", "")
         AuthService.set_blacklist_token(request.refresh_token, access_token)
-        AuthService.destroy_session(current_user_id)
+        payload = SecurityUtils.decode_token(access_token)
+        session_id = payload.get("sid", "") if payload else ""
+        if session_id:
+            AuthService.destroy_session(session_id)
     except Exception as e:
         logger.error(f"Logout failed for user {current_user_id}: {e}")
         raise Exception("Failed to logout")

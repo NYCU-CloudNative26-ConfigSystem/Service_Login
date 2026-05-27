@@ -59,6 +59,28 @@ services:
     networks:
       - auth_network
 
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth_test
+    environment:
+      SECRET_KEY: test-secret-key
+      DATABASE_URL: sqlite:///./test.db
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: WARNING
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      sh -c "pip install --quiet -r requirements-dev.txt && pytest tests/ -v"
+    networks:
+      - auth_network
+    profiles:
+      - test
+
 volumes:
   postgres_data:
   redis_data:

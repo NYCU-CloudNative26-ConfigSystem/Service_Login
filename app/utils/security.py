@@ -35,19 +35,23 @@ class SecurityUtils:
             return False
     
     @staticmethod
-    def create_access_token(user_id: int, expires_delta: Optional[timedelta] = None) -> str:
+    def create_access_token(user_id: int, company: str = "", session_id: str = "", username: str = "", role: str = "user", expires_delta: Optional[timedelta] = None) -> str:
         """Create JWT access token"""
         if expires_delta is None:
             expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
-        
+
         now = datetime.now(timezone.utc)
         expire = now + expires_delta
-        
+
         payload = {
             "sub": str(user_id),
             "iat": int(now.timestamp()),
             "exp": int(expire.timestamp()),
             "type": "access",
+            "company": company,
+            "username": username,
+            "role": role,
+            "sid": session_id,
         }
         
         try:
@@ -63,17 +67,20 @@ class SecurityUtils:
             raise
     
     @staticmethod
-    def create_refresh_token(user_id: int) -> str:
+    def create_refresh_token(user_id: int, company: str = "", username: str = "", role: str = "user") -> str:
         """Create JWT refresh token"""
         expires_delta = timedelta(days=settings.refresh_token_expire_days)
         now = datetime.now(timezone.utc)
         expire = now + expires_delta
-        
+
         payload = {
             "sub": str(user_id),
             "iat": int(now.timestamp()),
             "exp": int(expire.timestamp()),
             "type": "refresh",
+            "company": company,
+            "username": username,
+            "role": role,
         }
         
         try:
