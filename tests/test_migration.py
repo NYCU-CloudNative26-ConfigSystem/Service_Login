@@ -28,11 +28,12 @@ def test_alembic_upgrade_and_downgrade(tmp_path: Path):
 
     columns = [col["name"] for col in inspector.get_columns("users")]
     assert "company" in columns
+    assert "role" in columns
 
     with engine.connect() as connection:
         version = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert version == "0002_add_company_to_users"
+    assert version == "0003_add_role_to_users"
 
     command.downgrade(config, "base")
 
