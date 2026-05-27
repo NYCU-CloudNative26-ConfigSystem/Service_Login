@@ -42,6 +42,7 @@ class UserService:
             hashed_password=hashed_password,
             full_name=user_data.full_name,
             company=user_data.company,
+            role=user_data.role or "user",
         )
         
         try:
