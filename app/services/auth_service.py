@@ -70,13 +70,13 @@ class AuthService:
             raise AccountLockedException()
     
     @staticmethod
-    def create_tokens(user_id: int, company: str = "", username: str = "") -> dict:
+    def create_tokens(user_id: int, company: str = "", username: str = "", role: str = "user") -> dict:
         """Create both access and refresh tokens"""
         logger.info(f"Creating tokens for user: {user_id}")
 
         session_id = AuthService.create_session(user_id)
-        access_token = SecurityUtils.create_access_token(user_id, company=company, session_id=session_id, username=username)
-        refresh_token = SecurityUtils.create_refresh_token(user_id, company=company, username=username)
+        access_token = SecurityUtils.create_access_token(user_id, company=company, session_id=session_id, username=username, role=role)
+        refresh_token = SecurityUtils.create_refresh_token(user_id, company=company, username=username, role=role)
 
         return {
             "access_token": access_token,
@@ -102,8 +102,9 @@ class AuthService:
 
         company = payload.get("company", "")
         username = payload.get("username", "")
+        role = payload.get("role", "user")
         session_id = AuthService.create_session(user_id)
-        new_access_token = SecurityUtils.create_access_token(user_id, company=company, session_id=session_id, username=username)
+        new_access_token = SecurityUtils.create_access_token(user_id, company=company, session_id=session_id, username=username, role=role)
         logger.info(f"Access token refreshed for user: {user_id}")
 
         return new_access_token

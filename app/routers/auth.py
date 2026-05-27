@@ -87,7 +87,7 @@ async def login(
         user_service.update_last_login(user.id)
         
         # Create tokens
-        tokens = AuthService.create_tokens(user.id, company=user.company, username=user.username)
+        tokens = AuthService.create_tokens(user.id, company=user.company, username=user.username, role=user.role)
         
         logger.info(f"Login successful for user: {user.id}")
         access_token = tokens["access_token"]
