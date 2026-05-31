@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     session_expire_seconds: int = 86400  # 24 hours
     max_login_attempts: int = 5
     lockout_duration_seconds: int = 900  # 15 minutes
-    
+
+    # Internal service-to-service auth
+    internal_api_key: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = False

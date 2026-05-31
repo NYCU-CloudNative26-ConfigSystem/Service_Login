@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.database.connection import init_db, close_db
 from app.routers import auth_router
+from app.routers.internal import router as internal_router
 
 
 # Create FastAPI app
@@ -52,6 +53,7 @@ async def log_requests(request: Request, call_next):
 
 # Include routers
 app.include_router(auth_router)
+app.include_router(internal_router)
 
 
 # Lifespan events
