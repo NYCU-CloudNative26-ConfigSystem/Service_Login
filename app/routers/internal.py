@@ -27,6 +27,8 @@ def get_user_emails(
     x_internal_key: str = Header(...),
     db: Session = Depends(get_db),
 ):
+    if not settings.internal_api_key:
+        raise HTTPException(status_code=503, detail="Internal API not configured")
     if x_internal_key != settings.internal_api_key:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if not request.user_ids:
