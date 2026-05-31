@@ -1,4 +1,6 @@
 """Main FastAPI application"""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,18 +13,29 @@ from app.routers import auth_router
 from app.routers.internal import router as internal_router
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"Starting {settings.app_name}")
+    await init_db()
+    logger.info("Application startup complete")
+    yield
+    logger.info("Shutting down application")
+    await close_db()
+    logger.info("Application shutdown complete")
+
+
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
     description="Login microservice with PostgreSQL and Redis",
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[settings.app_base_url] if settings.app_base_url else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,23 +67,6 @@ async def log_requests(request: Request, call_next):
 # Include routers
 app.include_router(auth_router)
 app.include_router(internal_router)
-
-
-# Lifespan events
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup"""
-    logger.info(f"Starting {settings.app_name}")
-    await init_db()
-    logger.info("Application startup complete")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up on shutdown"""
-    logger.info("Shutting down application")
-    await close_db()
-    logger.info("Application shutdown complete")
 
 
 # Health check endpoint

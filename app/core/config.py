@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Internal service-to-service auth
     internal_api_key: str = ""
 
+    # CORS — restrict to this origin in production (leave empty to allow all during dev)
+    app_base_url: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = False
