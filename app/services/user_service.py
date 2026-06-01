@@ -10,7 +10,7 @@ from app.core.exceptions import (
     UserAlreadyExistsException,
 )
 from app.core.logging import logger
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class UserService:
@@ -104,7 +104,7 @@ class UserService:
         """Update user's last login timestamp"""
         try:
             user = self.get_user_by_id(user_id)
-            user.last_login_at = datetime.utcnow()
+            user.last_login_at = datetime.now(timezone.utc)
             self.db.commit()
             logger.debug(f"Last login updated for user: {user_id}")
             return True

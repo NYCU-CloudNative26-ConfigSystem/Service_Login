@@ -1,7 +1,7 @@
 """User database model"""
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, func
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database.connection import Base
 from app.core.logging import logger
 
@@ -28,7 +28,7 @@ class User(Base):
     
     def update_last_login(self):
         """Update last login timestamp"""
-        self.last_login_at = datetime.utcnow()
+        self.last_login_at = datetime.now(timezone.utc)
     
     @classmethod
     def create_from_dict(cls, **kwargs):
