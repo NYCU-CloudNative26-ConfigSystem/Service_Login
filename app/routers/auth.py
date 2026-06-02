@@ -20,6 +20,7 @@ from app.core.exceptions import (
     InvalidCredentialsException,
     InvalidTokenException,
     TokenBlacklistedException,
+    UserNotFoundException,
 )
 from app.core.logging import logger
 
@@ -72,23 +73,27 @@ async def login(
     
     user_service = UserService(db)
     
+    existing_user = None
     try:
-        # Check if account is locked
-        user = user_service.get_user_by_email(login_data.email)
-        AuthService.check_account_locked(user.id)
-        
+        # Check if account is locked (also confirms user exists)
+        try:
+            existing_user = user_service.get_user_by_email(login_data.email)
+        except UserNotFoundException:
+            raise InvalidCredentialsException()
+        AuthService.check_account_locked(existing_user.id)
+
         # Authenticate
         user = user_service.authenticate_user(login_data)
-        
+
         # Record successful login
         AuthService.record_successful_login(user.id)
-        
+
         # Update last login timestamp
         user_service.update_last_login(user.id)
-        
+
         # Create tokens
         tokens = AuthService.create_tokens(user.id, company=user.company, username=user.username, role=user.role)
-        
+
         logger.info(f"Login successful for user: {user.id}")
         access_token = tokens["access_token"]
         return LoginResponse(
@@ -97,12 +102,11 @@ async def login(
             user=UserResponse.model_validate(user),
         )
     except InvalidCredentialsException:
-        # Record failed login attempt
-        user = user_service.get_user_by_email(login_data.email)
-        try:
-            AuthService.record_failed_login(user.id)
-        except Exception:
-            pass  # Account locked exception will be raised
+        if existing_user is not None:
+            try:
+                AuthService.record_failed_login(existing_user.id)
+            except Exception:
+                pass
         raise
 
 
