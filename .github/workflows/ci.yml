@@ -135,7 +135,7 @@ jobs:
         run: |
           export IMAGE_LOGIN="${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPO}/login:${GITHUB_SHA}"
           envsubst '${IMAGE_LOGIN}${K8S_NAMESPACE}' < infra/k8s/services/login.yaml | kubectl apply -f -
-          kubectl rollout status deployment/service-login -n "${K8S_NAMESPACE}" --timeout=300s
+          kubectl rollout status deployment/service-login -n "${K8S_NAMESPACE}" --timeout=600s
 
   deploy-production:
     name: Deploy · Production
@@ -194,4 +194,4 @@ jobs:
         run: |
           export IMAGE_LOGIN="${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPO}/login:${GITHUB_SHA}"
           envsubst '${IMAGE_LOGIN}${K8S_NAMESPACE}' < infra/k8s/services/login.yaml | kubectl apply -f -
-          kubectl rollout status deployment/service-login -n "${K8S_NAMESPACE}" --timeout=300s
+          kubectl rollout status deployment/service-login -n "${K8S_NAMESPACE}" --timeout=600s
