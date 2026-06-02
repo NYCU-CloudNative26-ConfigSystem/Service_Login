@@ -86,6 +86,7 @@ jobs:
     environment: staging
     env:
       K8S_NAMESPACE: config-system-staging
+      REPLICAS: "1"
     permissions:
       contents: read
       id-token: write
@@ -134,7 +135,7 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           export IMAGE_LOGIN="${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPO}/login:${GITHUB_SHA}"
-          envsubst '${IMAGE_LOGIN}${K8S_NAMESPACE}' < infra/k8s/services/login.yaml | kubectl apply -f -
+          envsubst '${IMAGE_LOGIN}${K8S_NAMESPACE}${REPLICAS}' < infra/k8s/services/login.yaml | kubectl apply -f -
           kubectl rollout status deployment/service-login -n "${K8S_NAMESPACE}" --timeout=600s
 
   deploy-production:
@@ -145,6 +146,7 @@ jobs:
     environment: production
     env:
       K8S_NAMESPACE: config-system
+      REPLICAS: "3"
     permissions:
       contents: read
       id-token: write
@@ -193,5 +195,5 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           export IMAGE_LOGIN="${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPO}/login:${GITHUB_SHA}"
-          envsubst '${IMAGE_LOGIN}${K8S_NAMESPACE}' < infra/k8s/services/login.yaml | kubectl apply -f -
+          envsubst '${IMAGE_LOGIN}${K8S_NAMESPACE}${REPLICAS}' < infra/k8s/services/login.yaml | kubectl apply -f -
           kubectl rollout status deployment/service-login -n "${K8S_NAMESPACE}" --timeout=600s
