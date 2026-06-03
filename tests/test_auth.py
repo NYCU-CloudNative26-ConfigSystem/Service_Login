@@ -219,3 +219,62 @@ class TestSecurityUtils:
         assert payload["sub"] == user_id
         assert payload["company"] == "TestCo"
         assert payload["sid"] == "abc-session"
+
+
+class TestTokenRevocation:
+    """Ensure tokens cannot be reused after logout."""
+
+    def test_refresh_token_revoked_after_logout(self, client):
+        """Refresh token used after logout must be rejected."""
+        _register(client, email="revoke@example.com", username="revoke_user")
+        login_data = _login(client, email="revoke@example.com").json()
+        access_token = login_data["access_token"]
+        refresh_token = login_data["refresh_token"]
+
+        client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"refresh_token": refresh_token},
+        )
+
+        response = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        assert response.status_code in (401, 400)
+
+    def test_access_token_rejected_after_logout(self, client):
+        """Access token must be invalid immediately after logout."""
+        _register(client, email="revoke2@example.com", username="revoke_user2")
+        login_data = _login(client, email="revoke2@example.com").json()
+        access_token = login_data["access_token"]
+        refresh_token = login_data["refresh_token"]
+
+        client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"refresh_token": refresh_token},
+        )
+
+        response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert response.status_code == 401
+
+    def test_admin_role_stored_in_jwt(self, client):
+        """Registering with role=admin should reflect in JWT claims."""
+        client.post("/api/v1/auth/register", json={
+            "email": "admin@example.com",
+            "username": "admin_user",
+            "password": "securepassword123",
+            "company": "AdminCo",
+            "role": "admin",
+        })
+        token = client.post("/api/v1/auth/login", json={
+            "email": "admin@example.com",
+            "password": "securepassword123",
+        }).json()["access_token"]
+        payload = SecurityUtils.decode_token(token)
+        assert payload["role"] == "admin"
+        assert payload["company"] == "AdminCo"
