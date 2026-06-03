@@ -16,7 +16,8 @@ class UserRegisterRequest(BaseModel):
 
 class UserLoginRequest(BaseModel):
     """Request schema for user login"""
-    email: EmailStr
+    email: Optional[str] = None
+    username: Optional[str] = None
     password: str
 
 class UserLogoutRequest(BaseModel):

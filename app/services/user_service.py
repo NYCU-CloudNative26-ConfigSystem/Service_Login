@@ -57,24 +57,31 @@ class UserService:
             raise UserAlreadyExistsException()
     
     def authenticate_user(self, login_data: UserLoginRequest) -> User:
-        """Authenticate user with email and password"""
-        logger.info(f"Authenticating user: {login_data.email}")
+        """Authenticate user with email/username and password"""
+        identifier = login_data.username or login_data.email
+        if not identifier:
+            logger.warning("Authentication failed: No email or username provided")
+            raise InvalidCredentialsException()
+
+        logger.info(f"Authenticating user: {identifier}")
         
-        # Find user by email
-        user = self.db.query(User).filter(User.email == login_data.email).first()
+        # Find user by email or username
+        user = self.db.query(User).filter(
+            (User.email == identifier) | (User.username == identifier)
+        ).first()
         
         if not user:
-            logger.warning(f"Authentication failed: User {login_data.email} not found")
+            logger.warning(f"Authentication failed: User {identifier} not found")
             raise InvalidCredentialsException()
         
         # Verify password
         if not SecurityUtils.verify_password(login_data.password, user.hashed_password):
-            logger.warning(f"Authentication failed: Invalid password for {login_data.email}")
+            logger.warning(f"Authentication failed: Invalid password for {identifier}")
             raise InvalidCredentialsException()
         
         # Check if user is active
         if not user.is_active:
-            logger.warning(f"Authentication failed: User {login_data.email} is not active")
+            logger.warning(f"Authentication failed: User {identifier} is not active")
             raise InvalidCredentialsException()
         
         logger.info(f"User authenticated successfully: {user.id}")
@@ -96,6 +103,18 @@ class UserService:
         
         if not user:
             logger.warning(f"User not found: {email}")
+            raise UserNotFoundException()
+        
+        return user
+    
+    def get_user_by_username_or_email(self, identifier: str) -> User:
+        """Get user by username or email"""
+        user = self.db.query(User).filter(
+            (User.username == identifier) | (User.email == identifier)
+        ).first()
+        
+        if not user:
+            logger.warning(f"User not found: {identifier}")
             raise UserNotFoundException()
         
         return user

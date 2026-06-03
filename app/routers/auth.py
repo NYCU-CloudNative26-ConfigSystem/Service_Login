@@ -69,7 +69,11 @@ async def login(
     db: Session = Depends(get_db),
 ):
     """Login user and return access and refresh tokens"""
-    logger.info(f"Login request for: {login_data.email}")
+    identifier = login_data.username or login_data.email
+    if not identifier:
+        raise InvalidCredentialsException()
+
+    logger.info(f"Login request for: {identifier}")
     
     user_service = UserService(db)
     
@@ -77,7 +81,7 @@ async def login(
     try:
         # Check if account is locked (also confirms user exists)
         try:
-            existing_user = user_service.get_user_by_email(login_data.email)
+            existing_user = user_service.get_user_by_username_or_email(identifier)
         except UserNotFoundException:
             raise InvalidCredentialsException()
         AuthService.check_account_locked(existing_user.id)
